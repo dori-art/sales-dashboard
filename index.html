@@ -109,6 +109,26 @@ select { font-size:13px; padding:5px 10px; height:34px; border-radius:var(--radi
 .ld { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
 .cw { position:relative; width:100%; height:260px; }
 
+
+/* heatmap */
+.tabs { display:flex; gap:0; border-bottom:.5px solid var(--border); margin-bottom:1rem; }
+.tab-btn { padding:7px 16px; font-size:13px; cursor:pointer; border:none; background:none; color:var(--text2); border-bottom:2px solid transparent; transition:all .1s; }
+.tab-btn.on { color:var(--text); border-bottom-color:var(--blue); font-weight:500; }
+.heatmap-wrap { overflow-x:auto; }
+.heatmap-table { border-collapse:separate; border-spacing:3px; min-width:600px; width:100%; }
+.heatmap-table th { font-size:10px; color:var(--text3); font-weight:400; text-align:center; padding:2px 4px; white-space:nowrap; }
+.heatmap-table td.dow-label { font-size:11px; color:var(--text2); padding:3px 8px 3px 0; white-space:nowrap; text-align:right; }
+.hm-cell { width:100%; height:36px; border-radius:5px; position:relative; cursor:default; transition:filter .1s; }
+.hm-cell:hover { filter:brightness(.85); }
+.hm-cell-inner { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.hm-amt { font-size:9px; color:rgba(255,255,255,0.9); font-weight:500; line-height:1.2; }
+.hm-empty { background:var(--bg2) !important; }
+.dow-peak-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; }
+.dow-peak { background:var(--bg2); border-radius:var(--radius-sm); padding:.6rem .9rem; display:flex; align-items:center; gap:8px; }
+.dow-peak-name { font-size:12px; color:var(--text2); min-width:28px; }
+.dow-peak-time { font-size:14px; font-weight:600; color:var(--text); }
+.dow-peak-amt { font-size:11px; color:var(--text3); }
+
 /* toast */
 .toast { position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%); background:#1a1a1a; color:#fff; font-size:13px; padding:10px 18px; border-radius:8px; z-index:999; opacity:0; transition:opacity .2s; pointer-events:none; }
 .toast.show { opacity:1; }
@@ -181,12 +201,24 @@ select { font-size:13px; padding:5px 10px; height:34px; border-radius:var(--radi
   <div class="kpi-grid" id="kpis"></div>
 
   <div class="card">
-    <div style="margin-bottom:8px;min-height:22px" id="peakLine"></div>
-    <div class="legend">
-      <span><span class="ld" style="background:#378ADD"></span>일반 시간대</span>
-      <span><span class="ld" style="background:#BA7517"></span>피크 시간대</span>
+    <div class="tabs">
+      <button class="tab-btn on" onclick="switchTab('hourly',this)">시간대별 매출</button>
+      <button class="tab-btn" onclick="switchTab('heatmap',this)">요일 × 시간 히트맵</button>
     </div>
-    <div class="cw"><canvas id="hc"></canvas></div>
+
+    <div id="tab-hourly">
+      <div style="margin-bottom:8px;min-height:22px" id="peakLine"></div>
+      <div class="legend">
+        <span><span class="ld" style="background:#378ADD"></span>일반 시간대</span>
+        <span><span class="ld" style="background:#BA7517"></span>피크 시간대</span>
+      </div>
+      <div class="cw"><canvas id="hc"></canvas></div>
+    </div>
+
+    <div id="tab-heatmap" style="display:none">
+      <div class="heatmap-wrap" id="heatmapWrap"></div>
+      <div class="dow-peak-row" id="dowPeakRow"></div>
+    </div>
   </div>
 
 </div>
@@ -614,6 +646,80 @@ function renderHourly(){
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+'원'}}},
       scales:{x:{grid:{display:false},ticks:{font:{size:11},autoSkip:false}},y:{grid:{color:'rgba(128,128,128,0.08)'},ticks:{callback:v=>v>=10000?(v/10000).toFixed(0)+'만':v.toLocaleString(),font:{size:11}},beginAtZero:true}}}
   });
+}
+
+
+// ── 탭 전환 ──────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  document.getElementById('tab-hourly').style.display = name==='hourly' ? '' : 'none';
+  document.getElementById('tab-heatmap').style.display = name==='heatmap' ? '' : 'none';
+  if(name==='heatmap') renderHeatmap();
+}
+
+// ── 히트맵 ───────────────────────────────────────────────
+function renderHeatmap() {
+  const d = filtered();
+  const sales = d.filter(r=>!r.isCancel);
+  const DOWS = ['일','월','화','수','목','금','토'];
+  const hours = []; for(let i=7;i<=21;i++) hours.push(i);
+
+  // [dow][hour] 합계
+  const grid = Array.from({length:7}, ()=>({}));
+  sales.forEach(r => {
+    const dow = new Date(r.date).getDay();
+    grid[dow][r.hour] = (grid[dow][r.hour]||0) + r.amt;
+  });
+
+  // 전체 최대값 (색상 스케일용)
+  const allVals = grid.flatMap(g=>Object.values(g));
+  const maxVal = Math.max(1, ...allVals);
+
+  // 히트맵 테이블
+  let html = '<table class="heatmap-table"><thead><tr><th></th>';
+  hours.forEach(h => html += `<th>${h}시</th>`);
+  html += '</tr></thead><tbody>';
+
+  grid.forEach((g, dow) => {
+    const hasAny = Object.keys(g).length > 0;
+    html += `<tr><td class="dow-label">${DOWS[dow]}</td>`;
+    hours.forEach(h => {
+      const amt = g[h]||0;
+      if(!hasAny || amt===0) {
+        html += `<td><div class="hm-cell hm-empty"></div></td>`;
+      } else {
+        const ratio = amt/maxVal;
+        // 파란색 계열 농도
+        const r = Math.round(24 + (55-24)*(1-ratio));
+        const gv = Math.round(95 + (138-95)*(1-ratio));
+        const b = Math.round(165 + (221-165)*(1-ratio));
+        // 피크는 amber
+        const peakHour = Object.entries(g).sort((a,b)=>b[1]-a[1])[0];
+        const isPeak = peakHour && parseInt(peakHour[0])===h;
+        const bg = isPeak ? `rgb(186,117,23)` : `rgb(${r},${gv},${b})`;
+        const label = amt>=10000?(amt/10000).toFixed(0)+'만':amt.toLocaleString();
+        html += `<td><div class="hm-cell" style="background:${bg}" title="${DOWS[dow]} ${h}:00 · ${amt.toLocaleString()}원"><div class="hm-cell-inner"><span class="hm-amt">${label}</span></div></div></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('heatmapWrap').innerHTML = html;
+
+  // 요일별 피크타임 요약
+  let peakHtml = '';
+  grid.forEach((g, dow) => {
+    if(!Object.keys(g).length) return;
+    const peak = Object.entries(g).sort((a,b)=>b[1]-a[1])[0];
+    const fmt = v => v>=10000?(v/10000).toFixed(1)+'만':v.toLocaleString();
+    peakHtml += `<div class="dow-peak">
+      <span class="dow-peak-name">${DOWS[dow]}요일</span>
+      <span class="dow-peak-time">${peak[0]}:00</span>
+      <span class="dow-peak-amt">${fmt(peak[1])}원</span>
+    </div>`;
+  });
+  document.getElementById('dowPeakRow').innerHTML = peakHtml;
 }
 
 // ── 토스트 ───────────────────────────────────────────────
