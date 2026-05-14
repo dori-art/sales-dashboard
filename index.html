@@ -465,7 +465,7 @@ function onDrop(e) { e.preventDefault(); document.getElementById('dropzone').cla
 
 function onFiles(flist) {
   [...flist].forEach(f => {
-    const sn = storeName(f.name);
+    let sn = storeName(f.name);
     const rd = new FileReader();
     rd.onload = async ev => {
       const wb = XLSX.read(ev.target.result, {type:'array'});
