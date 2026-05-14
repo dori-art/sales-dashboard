@@ -402,39 +402,47 @@ function detectFileType(headers, raw) {
 // ── 백화점 파일 파싱 ──────────────────────────────────────
 function parseDepartment(raw, fname) {
   const rows = [];
-  // 헤더 행 찾기 (날짜 컬럼 있는 행)
-  const hi = raw.findIndex(r => r.includes('날짜'));
+  // 헤더 행 찾기 — 문자열로 변환해서 비교
+  const hi = raw.findIndex(r => r.map(x => String(x||'')).includes('날짜'));
   if (hi < 0) return rows;
   
-  const H = raw[hi];
+  const H = raw[hi].map(x => String(x||''));
   const dateIdx = H.indexOf('날짜');
   const typeIdx = H.indexOf('구분');
   
   // 시간대 컬럼 찾기 (HH:MM 형식)
   const timeColumns = [];
   H.forEach((h, i) => {
-    if (/^\d{2}:\d{2}$/.test(String(h))) timeColumns.push({ idx: i, time: String(h) });
+    if (/^\d{2}:\d{2}$/.test(h)) timeColumns.push({ idx: i, time: h });
   });
-  
-  // 매장명 추출 (파일명에서)
-  const store = storeName(fname);
   
   for (let i = hi + 1; i < raw.length; i++) {
     const r = raw[i];
-    if (!r[dateIdx]) continue;
+    if (!r[dateIdx] && r[dateIdx] !== 0) continue;
     
     // 구분이 '매출'인 행만
-    if (r[typeIdx] && String(r[typeIdx]).trim() !== '매출') continue;
+    const typeVal = String(r[typeIdx]||'').trim();
+    if (typeVal && typeVal !== '매출') continue;
     
-    const dateRaw = String(r[dateIdx]);
-    const date = dateRaw.slice(0, 10); // 2026-04-01
+    // 날짜 파싱 — Date 객체, 문자열 모두 대응
+    let date = '';
+    const dv = r[dateIdx];
+    if (dv instanceof Date || (typeof dv === 'number' && dv > 40000)) {
+      // Excel serial date 또는 Date 객체
+      const d = dv instanceof Date ? dv : new Date((dv - 25569) * 86400 * 1000);
+      date = d.toISOString().slice(0, 10);
+    } else {
+      const ds = String(dv);
+      date = ds.slice(0, 10);
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     
     // 시간대별 매출 → 30분 단위를 시간 단위로 합산
     const hourMap = {};
     timeColumns.forEach(({ idx, time }) => {
       const hour = parseInt(time.slice(0, 2));
-      const amt = parseInt(String(r[idx] || 0).replace(/,/g, '')) || 0;
+      const rawAmt = r[idx];
+      const amt = parseInt(String(rawAmt||0).replace(/,/g,'')) || 0;
       if (amt > 0) hourMap[hour] = (hourMap[hour] || 0) + amt;
     });
     
@@ -461,8 +469,15 @@ function onFiles(flist) {
       let rows = [];
       
       if (fileType === 'department') {
-        // 백화점 형식
+        // 백화점 형식 — 매장명을 파일 안 영업점 컬럼에서 추출
         rows = parseDepartment(raw, f.name);
+        // 영업점 컬럼에서 실제 매장명 추출
+        const deptHi = raw.findIndex(r => r.map(x=>String(x||'')).includes('영업점'));
+        if (deptHi >= 0 && raw[deptHi+1]) {
+          const storeIdx = raw[deptHi].map(x=>String(x||'')).indexOf('영업점');
+          const realStore = String(raw[deptHi+1][storeIdx]||'').trim();
+          if (realStore) sn = realStore;
+        }
       } else {
         // 머니플러스 형식 (기본)
         const iT=H.indexOf('거래시간'), iD=H.indexOf('거래일자'), iA=H.indexOf('거래금액'), iG=H.indexOf('승인구분');
