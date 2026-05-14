@@ -293,7 +293,7 @@ async function loadFromDB() {
     all.forEach(r => {
       const s = r.store;
       if (!stores[s]) stores[s] = [];
-      stores[s].push({ hour: r.hour, date: r.date, amt: r.amt, isCancel: r.is_cancel });
+      stores[s].push({ hour: r.hour, date: r.date, amt: r.amt, isCancel: r.is_cancel === true || r.is_cancel === 'true' });
     });
     if (Object.keys(stores).length) initDash();
     showToast(`DB에서 ${all.length.toLocaleString()}건 불러옴`);
