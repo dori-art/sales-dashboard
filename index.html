@@ -388,7 +388,8 @@ function detectFileType(headers, raw) {
   if (headers.includes('거래시간') && headers.includes('거래금액')) return 'moneyflex';
   
   // 백화점: 날짜 컬럼 + 10:00, 11:00 같은 시간대 컬럼 있음
-  if (headers.includes('날짜') && headers.some(h => /^\d{2}:\d{2}$/.test(String(h)))) return 'department';
+  const hStrs = headers.map(h => String(h||'').trim());
+  if (hStrs.includes('날짜') && hStrs.some(h => /^\d{2}:\d{2}$/.test(h))) return 'department';
   
   // 쿠팡이츠: '주문일시' 또는 '주문번호' 컬럼
   if (headers.some(h => String(h).includes('주문일시')) || headers.some(h => String(h).includes('주문번호'))) return 'coupang';
@@ -402,47 +403,55 @@ function detectFileType(headers, raw) {
 // ── 백화점 파일 파싱 ──────────────────────────────────────
 function parseDepartment(raw, fname) {
   const rows = [];
-  // 헤더 행 찾기 — 문자열로 변환해서 비교
+  // 헤더 행 찾기
   const hi = raw.findIndex(r => r.map(x => String(x||'')).includes('날짜'));
   if (hi < 0) return rows;
   
-  const H = raw[hi].map(x => String(x||''));
+  const H = raw[hi].map(x => String(x||'').trim());
   const dateIdx = H.indexOf('날짜');
   const typeIdx = H.indexOf('구분');
+  if (dateIdx < 0) return rows;
   
   // 시간대 컬럼 찾기 (HH:MM 형식)
   const timeColumns = [];
   H.forEach((h, i) => {
     if (/^\d{2}:\d{2}$/.test(h)) timeColumns.push({ idx: i, time: h });
   });
+  if (!timeColumns.length) return rows;
   
   for (let i = hi + 1; i < raw.length; i++) {
     const r = raw[i];
-    if (!r[dateIdx] && r[dateIdx] !== 0) continue;
+    if (r[dateIdx] === undefined || r[dateIdx] === null || r[dateIdx] === '') continue;
     
     // 구분이 '매출'인 행만
     const typeVal = String(r[typeIdx]||'').trim();
     if (typeVal && typeVal !== '매출') continue;
     
-    // 날짜 파싱 — Date 객체, 문자열 모두 대응
+    // 날짜 파싱 — XLSX.js는 날짜를 여러 형식으로 반환
     let date = '';
     const dv = r[dateIdx];
-    if (dv instanceof Date || (typeof dv === 'number' && dv > 40000)) {
-      // Excel serial date 또는 Date 객체
-      const d = dv instanceof Date ? dv : new Date((dv - 25569) * 86400 * 1000);
+    if (typeof dv === 'string' && /\d{4}-\d{2}-\d{2}/.test(dv)) {
+      // "2026-04-01" or "2026-04-01T00:00:00.000Z"
+      date = dv.slice(0, 10);
+    } else if (typeof dv === 'number') {
+      // Excel serial number
+      const d = new Date((dv - 25569) * 86400 * 1000);
       date = d.toISOString().slice(0, 10);
     } else {
+      // 기타 — toString 후 슬라이싱
       const ds = String(dv);
-      date = ds.slice(0, 10);
+      const m = ds.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
+      if (m) date = m[1] + '-' + m[2] + '-' + m[3];
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     
     // 시간대별 매출 → 30분 단위를 시간 단위로 합산
     const hourMap = {};
     timeColumns.forEach(({ idx, time }) => {
       const hour = parseInt(time.slice(0, 2));
       const rawAmt = r[idx];
-      const amt = parseInt(String(rawAmt||0).replace(/,/g,'')) || 0;
+      if (rawAmt === null || rawAmt === undefined || rawAmt === '') return;
+      const amt = typeof rawAmt === 'number' ? rawAmt : parseInt(String(rawAmt).replace(/,/g,'')) || 0;
       if (amt > 0) hourMap[hour] = (hourMap[hour] || 0) + amt;
     });
     
@@ -466,6 +475,12 @@ function onFiles(flist) {
       if (hi < 0) { showToast('형식이 맞지 않는 파일이에요'); return; }
       const H = raw[hi];
       const fileType = detectFileType(H, raw);
+      console.log('[DEBUG] 파일:', f.name);
+      console.log('[DEBUG] 파일타입:', fileType);
+      console.log('[DEBUG] 헤더:', H.slice(0,10));
+      if (fileType === 'department' && raw[1]) {
+        console.log('[DEBUG] 첫행 날짜값:', raw[1][H.indexOf('날짜')], typeof raw[1][H.indexOf('날짜')]);
+      }
       let rows = [];
       
       if (fileType === 'department') {
