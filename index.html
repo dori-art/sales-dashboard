@@ -377,6 +377,7 @@ function storeName(fname) {
     .replace(/매출[_\s]상세내역[\(（]?신용카드[\)）]?_*/gi,'')
     .replace(/\d{6}-\d{6}_/g,'')
     .replace(/_(시간대별_매출_현황|일별_매출_현황|매출_현황).*/gi,'')
+    .replace(/[_-]?(쿠팡이츠|쿠팡|배달의민족|배민|baemin|coupang).*/gi,'')
     .replace(/_?\d{8}$/g,'').replace(/^_+|_+$/g,'').trim() || fname;
 }
 
@@ -399,6 +400,43 @@ function detectFileType(headers, raw) {
   if (headers.some(h => String(h).includes('주문시각') || String(h).includes('접수시간'))) return 'baemin';
   
   return 'unknown';
+}
+
+
+// ── 쿠팡이츠 파싱 ────────────────────────────────────────
+function parseCoupang(raw, fname) {
+  const rows = [];
+  // 헤더 3행, 데이터는 index 3부터
+  // 컬럼: 0=일자, 1=시간(datetime), 8=거래유형, 10=주문금액
+  for (let i = 3; i < raw.length; i++) {
+    const r = raw[i];
+    if (!r[0] || !r[1]) continue;
+
+    // 거래유형 '결제'만 (취소 제외)
+    const tradeType = String(r[8]||'').trim();
+    if (tradeType !== '결제') continue;
+
+    // 날짜
+    const dv = r[0];
+    let date = '';
+    if (typeof dv === 'string') date = dv.slice(0,10);
+    else if (typeof dv === 'number') date = new Date((dv-25569)*86400*1000).toISOString().slice(0,10);
+    else date = String(dv).slice(0,10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    // 시간 — "2026-04-01 14:57:32" 형식
+    const tv = String(r[1]||'');
+    const timePart = tv.includes(' ') ? tv.split(' ')[1] : tv;
+    const hour = parseInt(timePart.slice(0,2));
+    if (isNaN(hour)) continue;
+
+    // 주문금액
+    const amt = typeof r[10] === 'number' ? r[10] : parseInt(String(r[10]||0).replace(/,/g,''))||0;
+    if (amt <= 0) continue;
+
+    rows.push({ hour, date, amt, isCancel: false });
+  }
+  return rows;
 }
 
 // ── 백화점 파일 파싱 ──────────────────────────────────────
@@ -478,7 +516,9 @@ function onFiles(flist) {
       const fileType = detectFileType(H, raw);
       let rows = [];
       
-      if (fileType === 'department') {
+      if (fileType === 'coupang') {
+        rows = parseCoupang(raw, f.name);
+      } else if (fileType === 'department') {
         // 백화점 형식 — 매장명을 파일 안 영업점 컬럼에서 추출
         rows = parseDepartment(raw, f.name);
         // 영업점 컬럼에서 실제 매장명 추출
