@@ -661,7 +661,8 @@ function filtered() {
 }
 function dateAmtMap(store) {
   const m = {};
-  getData(store).filter(r=>!r.isCancel).forEach(r => { m[r.date]=(m[r.date]||0)+r.amt; });
+  // amt 합산 (취소는 음수라 자동 반영)
+  getData(store).forEach(r => { m[r.date]=(m[r.date]||0)+r.amt; });
   return m;
 }
 
