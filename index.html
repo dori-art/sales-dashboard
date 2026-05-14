@@ -48,11 +48,7 @@ header h1 { font-size:18px; font-weight:600; }
 #dropzone { border:1.5px dashed var(--border2); border-radius:var(--radius); padding:1.75rem 1.5rem; text-align:center; cursor:pointer; background:var(--bg2); transition:background .15s,border-color .15s; }
 #dropzone:hover,#dropzone.drag { background:var(--blue-lt); border-color:var(--blue); }
 #dropzone.filled { border-style:solid; border-color:var(--green); background:var(--green-lt); }
-.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; justify-content:center; }
-.chip { display:inline-flex; align-items:center; gap:5px; background:var(--bg); border:0.5px solid var(--border); border-radius:20px; padding:4px 11px; font-size:12px; color:var(--text2); }
-.chip-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.chip .x { cursor:pointer; color:var(--text3); font-size:14px; line-height:1; margin-left:2px; }
-.chip .x:hover { color:#E24B4A; }
+
 
 /* upload mode toggle */
 .mode-row { display:flex; gap:6px; margin-bottom:1rem; }
@@ -165,7 +161,6 @@ select { font-size:13px; padding:5px 10px; height:34px; border-radius:var(--radi
   <div style="font-size:24px;margin-bottom:6px">↑</div>
   <div style="font-size:14px;font-weight:600;margin-bottom:3px">엑셀 파일 업로드</div>
   <div style="font-size:12px;color:var(--text2)">매장별 신용카드 매출 상세내역 (.xlsx) · 여러 파일 동시 가능 · 파일명 = 매장명</div>
-  <div class="chips" id="chips"></div>
 </div>
 
 <!-- DASHBOARD -->
@@ -379,7 +374,75 @@ function closeDupModal(ok) {
 function storeName(fname) {
   return fname.replace(/\.(xlsx?)$/i,'')
     .replace(/매출[_\s]상세내역[\(（]?신용카드[\)）]?_*/gi,'')
+    .replace(/\d{6}-\d{6}_/g,'')
+    .replace(/_(시간대별_매출_현황|일별_매출_현황|매출_현황).*/gi,'')
     .replace(/_?\d{8}$/g,'').replace(/^_+|_+$/g,'').trim() || fname;
+}
+
+// ── 파일 타입 감지 ────────────────────────────────────────
+function detectFileType(headers, raw) {
+  // 헤더 행의 텍스트를 합쳐서 판단
+  const headerStr = headers.join(' ');
+  
+  // 머니플러스: '거래시간', '거래일자', '거래금액' 컬럼 있음
+  if (headers.includes('거래시간') && headers.includes('거래금액')) return 'moneyflex';
+  
+  // 백화점: 날짜 컬럼 + 10:00, 11:00 같은 시간대 컬럼 있음
+  if (headers.includes('날짜') && headers.some(h => /^\d{2}:\d{2}$/.test(String(h)))) return 'department';
+  
+  // 쿠팡이츠: '주문일시' 또는 '주문번호' 컬럼
+  if (headers.some(h => String(h).includes('주문일시')) || headers.some(h => String(h).includes('주문번호'))) return 'coupang';
+  
+  // 배민: '주문시각' 또는 '접수시간'
+  if (headers.some(h => String(h).includes('주문시각') || String(h).includes('접수시간'))) return 'baemin';
+  
+  return 'unknown';
+}
+
+// ── 백화점 파일 파싱 ──────────────────────────────────────
+function parseDepartment(raw, fname) {
+  const rows = [];
+  // 헤더 행 찾기 (날짜 컬럼 있는 행)
+  const hi = raw.findIndex(r => r.includes('날짜'));
+  if (hi < 0) return rows;
+  
+  const H = raw[hi];
+  const dateIdx = H.indexOf('날짜');
+  const typeIdx = H.indexOf('구분');
+  
+  // 시간대 컬럼 찾기 (HH:MM 형식)
+  const timeColumns = [];
+  H.forEach((h, i) => {
+    if (/^\d{2}:\d{2}$/.test(String(h))) timeColumns.push({ idx: i, time: String(h) });
+  });
+  
+  // 매장명 추출 (파일명에서)
+  const store = storeName(fname);
+  
+  for (let i = hi + 1; i < raw.length; i++) {
+    const r = raw[i];
+    if (!r[dateIdx]) continue;
+    
+    // 구분이 '매출'인 행만
+    if (r[typeIdx] && String(r[typeIdx]).trim() !== '매출') continue;
+    
+    const dateRaw = String(r[dateIdx]);
+    const date = dateRaw.slice(0, 10); // 2026-04-01
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    
+    // 시간대별 매출 → 30분 단위를 시간 단위로 합산
+    const hourMap = {};
+    timeColumns.forEach(({ idx, time }) => {
+      const hour = parseInt(time.slice(0, 2));
+      const amt = parseInt(String(r[idx] || 0).replace(/,/g, '')) || 0;
+      if (amt > 0) hourMap[hour] = (hourMap[hour] || 0) + amt;
+    });
+    
+    Object.entries(hourMap).forEach(([hour, amt]) => {
+      rows.push({ hour: parseInt(hour), date, amt, isCancel: false });
+    });
+  }
+  return rows;
 }
 function onDrop(e) { e.preventDefault(); document.getElementById('dropzone').classList.remove('drag'); onFiles(e.dataTransfer.files); }
 
@@ -391,23 +454,31 @@ function onFiles(flist) {
       const wb = XLSX.read(ev.target.result, {type:'array'});
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      const hi = raw.findIndex(r => Array.isArray(r) && r.includes('거래시간'));
+      const hi = raw.findIndex(r => Array.isArray(r) && (r.includes('거래시간') || r.includes('날짜')));
       if (hi < 0) { showToast('형식이 맞지 않는 파일이에요'); return; }
       const H = raw[hi];
-      const iT=H.indexOf('거래시간'), iD=H.indexOf('거래일자'), iA=H.indexOf('거래금액'), iG=H.indexOf('승인구분');
-      const rows = [];
-      for (let i = hi+1; i < raw.length; i++) {
-        const r = raw[i];
-        if (!r[iD] && !r[iT]) continue;
-        const g = String(r[iG]||'');
-        if (g === '승인거절') continue;
-        const amt = parseInt(String(r[iA]||0).replace(/,/g,''))||0;
-        const ts = String(r[iT]||'0').padStart(6,'0');
-        const hour = parseInt(ts.slice(0,2));
-        const ds = String(r[iD]||'');
-        const date = ds.length===8 ? `${ds.slice(0,4)}-${ds.slice(4,6)}-${ds.slice(6,8)}` : ds;
-        const isCancel = g==='취소';
-        rows.push({hour, date, amt: isCancel ? -Math.abs(amt) : amt, isCancel});
+      const fileType = detectFileType(H, raw);
+      let rows = [];
+      
+      if (fileType === 'department') {
+        // 백화점 형식
+        rows = parseDepartment(raw, f.name);
+      } else {
+        // 머니플러스 형식 (기본)
+        const iT=H.indexOf('거래시간'), iD=H.indexOf('거래일자'), iA=H.indexOf('거래금액'), iG=H.indexOf('승인구분');
+        for (let i = hi+1; i < raw.length; i++) {
+          const r = raw[i];
+          if (!r[iD] && !r[iT]) continue;
+          const g = String(r[iG]||'');
+          if (g === '승인거절') continue;
+          const amt = parseInt(String(r[iA]||0).replace(/,/g,''))||0;
+          const ts = String(r[iT]||'0').padStart(6,'0');
+          const hour = parseInt(ts.slice(0,2));
+          const ds = String(r[iD]||'');
+          const date = ds.length===8 ? `${ds.slice(0,4)}-${ds.slice(4,6)}-${ds.slice(6,8)}` : ds;
+          const isCancel = g==='취소';
+          rows.push({hour, date, amt: isCancel ? -Math.abs(amt) : amt, isCancel});
+        }
       }
 
       // 중복 체크
@@ -481,9 +552,6 @@ function removeStore(e, n) {
 
 function renderChips() {
   const names = Object.keys(stores);
-  document.getElementById('chips').innerHTML = names.map((n,i) =>
-    `<span class="chip"><span class="chip-dot" style="background:${COLORS[i%6]}"></span>${n}<span class="x" onclick="removeStore(event,'${n}')">×</span></span>`
-  ).join('');
   document.getElementById('dropzone').classList.toggle('filled', names.length > 0);
 }
 
