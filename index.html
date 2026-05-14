@@ -569,10 +569,14 @@ function onFiles(flist) {
       // DB 저장
       showToast('DB에 저장 중...');
       const ok = await saveToDB(sn, rows);
-      if (ok) showToast(`${sn} 저장 완료 (${rows.length.toLocaleString()}건)`);
-      else showToast('DB 저장 실패 — 키를 확인하세요');
-
-      initDash();
+      if (ok) {
+        showToast(`${sn} 저장 완료 (${rows.length.toLocaleString()}건)`);
+        // DB에서 다시 불러와서 메모리 초기화 (중복 방지)
+        await loadFromDB();
+      } else {
+        showToast('DB 저장 실패 — 키를 확인하세요');
+        initDash();
+      }
     };
     rd.readAsArrayBuffer(f);
   });
