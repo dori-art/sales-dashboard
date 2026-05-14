@@ -372,6 +372,8 @@ function closeDupModal(ok) {
 
 // ── 파일 파싱 ────────────────────────────────────────────
 function storeName(fname) {
+  // 맥OS NFD 한글 → NFC 정규화
+  fname = fname.normalize('NFC');
   return fname.replace(/\.(xlsx?)$/i,'')
     .replace(/_?매출_상세내역[\(（]신용카드[\)）]/gi,'')
     .replace(/매출[_\s]상세내역[\(（]?신용카드[\)）]?_*/gi,'')
