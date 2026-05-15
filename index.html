@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>매출 대시보드 — 더커피</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -439,7 +439,7 @@ function onFiles(flist){
     let sn=cleanStoreName(f.name);
     const rd=new FileReader();
     rd.onload=async ev=>{
-      const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true,dense:false});
+      const wb=XLSX.read(ev.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       // 파일 타입 먼저 감지
