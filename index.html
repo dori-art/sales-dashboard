@@ -422,7 +422,7 @@ function parseMoneyFlex(raw,hi){
   const iT=H.indexOf('거래시간'),iD=H.indexOf('거래일자'),iA=H.indexOf('거래금액'),iG=H.indexOf('승인구분');
   for(let i=hi+1;i<raw.length;i++){
     const r=raw[i];if(!r[iD]&&!r[iT]) continue;
-    const g=String(r[iG]||'');if(g==='승인거절') continue;
+    const g=String(r[iG]||'');if(g==='승인거절'||g==='취소거절') continue;
     const amt=parseInt(String(r[iA]||0).replace(/,/g,''))||0;
     const ts=String(r[iT]||'0').padStart(6,'0');const hour=parseInt(ts.slice(0,2));
     const ds=String(r[iD]||'');
