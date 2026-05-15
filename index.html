@@ -439,7 +439,7 @@ function onFiles(flist){
     let sn=cleanStoreName(f.name);
     const rd=new FileReader();
     rd.onload=async ev=>{
-      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true,dense:false});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       const hi=raw.findIndex(r=>Array.isArray(r)&&(r.includes('거래시간')||r.map(x=>String(x||'')).includes('날짜')));
