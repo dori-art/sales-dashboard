@@ -406,7 +406,9 @@ function parseCoupang(raw){
     // r[0] 체크 — 날짜가 숫자나 Date 객체로 올 수 있음
     if(r[0]===undefined||r[0]===null||r[0]==='') continue;
     if(r[1]===undefined||r[1]===null||r[1]==='') continue;
-    if(String(r[8]||'').trim()!=='결제') continue;
+    const tradeType=String(r[8]||'').trim();
+    if(tradeType!=='결제'&&tradeType!=='취소') continue;
+    const isCancel=tradeType==='취소';
     
     // 날짜 파싱
     const dv=r[0];let date='';
@@ -433,7 +435,7 @@ function parseCoupang(raw){
     
     const amt=typeof r[10]==='number'?r[10]:parseInt(String(r[10]||0).replace(/,/g,''))||0;
     if(amt<=0) continue;
-    rows.push({hour,date,amt,isCancel:false});
+    rows.push({hour,date,amt:isCancel?-Math.abs(amt):amt,isCancel});
   }
   return rows;
 }
