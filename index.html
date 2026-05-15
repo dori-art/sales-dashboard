@@ -442,6 +442,21 @@ function onFiles(flist){
       const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true,dense:false});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      // 파일 타입 먼저 감지
+      const flat3=raw.slice(0,3).flat().map(x=>String(x||''));
+      const isCoupang = flat3.includes('주문정보') && flat3.includes('매출액');
+      
+      if(isCoupang) {
+        // 쿠팡이츠는 헤더가 0번 행
+        const rows = parseCoupang(raw);
+        if(!rows.length){showToast('쿠팡이츠 데이터가 없어요');return;}
+        showToast('DB에 저장 중...');
+        const ok = await saveToDB(sn, rows);
+        if(ok){showToast(`${sn} 저장 완료 (${rows.length.toLocaleString()}건)`);await loadFromDB();}
+        else{showToast('DB 저장 실패');} 
+        return;
+      }
+      
       const hi=raw.findIndex(r=>Array.isArray(r)&&(r.includes('거래시간')||r.map(x=>String(x||'')).includes('날짜')));
       if(hi<0){showToast('형식이 맞지 않는 파일이에요');return;}
       const H=raw[hi].map(x=>String(x||'').trim());
