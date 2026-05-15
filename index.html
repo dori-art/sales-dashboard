@@ -434,8 +434,8 @@ function parseCoupang(raw){
     if(isNaN(hour)) continue;
     
     const amt=typeof r[10]==='number'?r[10]:parseInt(String(r[10]||0).replace(/,/g,''))||0;
-    if(amt<=0) continue;
-    rows.push({hour,date,amt:isCancel?-Math.abs(amt):amt,isCancel});
+    if(amt===0) continue;
+    rows.push({hour,date,amt,isCancel});
   }
   return rows;
 }
