@@ -163,6 +163,23 @@ select { font-size:13px; padding:5px 10px; height:34px; border-radius:var(--radi
   <div style="font-size:12px;color:var(--text2)">매장별 신용카드 매출 상세내역 (.xlsx) · 여러 파일 동시 가능 · 파일명 = 매장명</div>
 </div>
 
+<!-- 배민 붙여넣기 -->
+<div id="baemin-wrap" style="display:none;margin-top:.75rem;background:var(--bg);border:.5px solid var(--border);border-radius:var(--radius);padding:1rem">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--text2)">매장</span>
+    <select id="baeminStore" style="font-size:13px;padding:5px 10px;height:34px;border-radius:var(--radius-sm);border:.5px solid var(--border2);background:var(--bg);color:var(--text);min-width:150px"></select>
+    <span style="font-size:11px;color:var(--text3)">배민 주문내역 화면에서 Cmd+A → Cmd+C 후 붙여넣기</span>
+  </div>
+  <textarea id="baeminText" placeholder="여기에 붙여넣기 (Cmd+V)..." style="width:100%;height:120px;font-size:12px;padding:10px;border-radius:var(--radius-sm);border:.5px solid var(--border2);background:var(--bg2);color:var(--text);resize:vertical;font-family:monospace"></textarea>
+  <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+    <div class="hdr-btn blue" onclick="parseBaemin()">파싱 → DB 저장</div>
+    <span id="baeminResult" style="font-size:12px;color:var(--text2)"></span>
+  </div>
+</div>
+<div style="margin:.5rem 0">
+  <span style="font-size:12px;color:var(--text2);cursor:pointer;text-decoration:underline" onclick="toggleBaemin()">+ 배민 주문내역 붙여넣기</span>
+</div>
+
 <!-- DASHBOARD -->
 <div id="dash" style="display:none;margin-top:1rem">
 
