@@ -260,6 +260,7 @@ async function checkDB(){
 }
 async function loadFromDB(){
   try{
+    stores={};
     let all=[],offset=0,limit=1000;
     while(true){
       const r=await sbFetch(`sales?select=store,date,hour,amt,is_cancel,source&order=date.asc&limit=${limit}&offset=${offset}`);
@@ -269,7 +270,6 @@ async function loadFromDB(){
       if(rows.length<limit) break;
       offset+=limit;
     }
-    stores={};
     all.forEach(r=>{
       if(!stores[r.store]) stores[r.store]=[];
       stores[r.store].push({hour:r.hour,date:r.date,amt:r.amt,isCancel:r.is_cancel===true||r.is_cancel==='true',source:r.source||'신용카드'});
