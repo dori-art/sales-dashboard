@@ -373,7 +373,7 @@ function cleanStoreName(fname){
     .replace(/매출[_\s]상세내역[\(（]?신용카드[\)）]?_*/gi,'')
     .replace(/\d{6}-\d{6}_/g,'')
     .replace(/_(시간대별_매출_현황|일별_매출_현황|매출_현황).*/gi,'')
-    .replace(/[_-]?(쿠팡이츠|쿠팡|배달의민족|배민|baemin|coupang).*/gi,'')
+    .replace(/[_-]?(쿠팡이츠|쿠팡|배달의민족|배민|baemin|coupang|태블릿|tablet).*/gi,'')
     .replace(/_?\d{8}$/g,'').replace(/^_+|_+$/g,'').trim()||fname;
 }
 function detectType(H,raw){
@@ -475,6 +475,17 @@ function onFiles(flist){
       // 파일 타입 먼저 감지
       const flat3=raw.slice(0,3).flat().map(x=>String(x||''));
       const isCoupang = flat3.includes('주문정보') && flat3.includes('매출액');
+      const isTablet = flat3.includes('Store Name') && flat3.includes('Total Sales (Local)');
+      
+      if(isTablet){
+        const rows=parseTablet(raw);
+        if(!rows.length){showToast('태블릿 데이터가 없어요');return;}
+        showToast('DB에 저장 중...');
+        const ok=await saveToDB(sn,rows,'태블릿');
+        if(ok){showToast(`${sn} 저장 완료 (${rows.length.toLocaleString()}건)`);await loadFromDB();}
+        else{showToast('DB 저장 실패');}
+        return;
+      }
       
       if(isCoupang) {
         // 쿠팡이츠는 헤더가 0번 행
