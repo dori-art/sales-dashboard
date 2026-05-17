@@ -326,11 +326,22 @@ function parseTablet(raw){
   for(let i=1;i<raw.length;i++){
     const r=raw[i];
     if(!r[di]) continue;
-    const dv=String(r[di]||'');
-    const date=dv.slice(0,10);
-    const timePart=dv.includes(' ')?dv.split(' ')[1]:'00:00:00';
-    const hour=parseInt(timePart.slice(0,2));
-    if(isNaN(hour)) continue;
+    const dv=r[di];
+    let date='', hour=0;
+    if(typeof dv==='string'){
+      date=dv.slice(0,10);
+      const tp=dv.includes(' ')?dv.split(' ')[1]:'00:00:00';
+      hour=parseInt(tp.slice(0,2));
+    } else if(dv instanceof Date || (typeof dv==='object'&&dv!==null)){
+      const d=new Date(dv);
+      date=d.toISOString().slice(0,10);
+      hour=d.getHours();
+    } else if(typeof dv==='number'){
+      const d=new Date((dv-25569)*86400*1000);
+      date=d.toISOString().slice(0,10);
+      hour=d.getHours();
+    }
+    if(!date||isNaN(hour)) continue;
     const rawAmt=r[ai];
     const amt=typeof rawAmt==='number'?Math.round(rawAmt):parseInt(String(rawAmt||0).replace(/,/g,''))||0;
     if(amt<=0) continue;
