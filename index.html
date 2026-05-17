@@ -333,13 +333,16 @@ function parseTablet(raw){
       const tp=dv.includes(' ')?dv.split(' ')[1]:'00:00:00';
       hour=parseInt(tp.slice(0,2));
     } else if(dv instanceof Date || (typeof dv==='object'&&dv!==null)){
+      // UTC+9 한국 시간대 보정
       const d=new Date(dv);
-      date=d.toISOString().slice(0,10);
-      hour=d.getHours();
+      const kst=new Date(d.getTime()+9*60*60*1000);
+      date=kst.toISOString().slice(0,10);
+      hour=kst.getUTCHours();
     } else if(typeof dv==='number'){
       const d=new Date((dv-25569)*86400*1000);
-      date=d.toISOString().slice(0,10);
-      hour=d.getHours();
+      const kst=new Date(d.getTime()+9*60*60*1000);
+      date=kst.toISOString().slice(0,10);
+      hour=kst.getUTCHours();
     }
     if(!date||isNaN(hour)) continue;
     const rawAmt=r[ai];
