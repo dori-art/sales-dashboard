@@ -327,6 +327,7 @@ function parseTablet(raw){
     const r=raw[i];
     if(!r[di]) continue;
     const dv=r[di];
+    if(i===1) console.log('[DEBUG] date raw:', dv, typeof dv, dv instanceof Date);
     let date='', hour=0;
     if(typeof dv==='string'){
       date=dv.slice(0,10);
