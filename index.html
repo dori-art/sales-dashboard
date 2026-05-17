@@ -315,6 +315,30 @@ function loadJSON(input){
 }
 
 // ── 배민 붙여넣기 ─────────────────────────────────────────
+
+// ── 태블릿 (Looker) 파싱 ─────────────────────────────────
+function parseTablet(raw){
+  const rows=[];
+  const H=raw[0].map(x=>String(x||'').trim());
+  const di=H.indexOf('Date');
+  const ai=H.indexOf('Total Sales (Local)');
+  if(di<0||ai<0) return rows;
+  for(let i=1;i<raw.length;i++){
+    const r=raw[i];
+    if(!r[di]) continue;
+    const dv=String(r[di]||'');
+    const date=dv.slice(0,10);
+    const timePart=dv.includes(' ')?dv.split(' ')[1]:'00:00:00';
+    const hour=parseInt(timePart.slice(0,2));
+    if(isNaN(hour)) continue;
+    const rawAmt=r[ai];
+    const amt=typeof rawAmt==='number'?Math.round(rawAmt):parseInt(String(rawAmt||0).replace(/,/g,''))||0;
+    if(amt<=0) continue;
+    rows.push({hour,date,amt,isCancel:false,source:'태블릿'});
+  }
+  return rows;
+}
+
 function toggleBaemin(){
   const box=document.getElementById('baemin-box');
   const isOpen=box.style.display==='block';
