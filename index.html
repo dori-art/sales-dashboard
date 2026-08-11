@@ -495,7 +495,7 @@ function cleanStoreName(fname){
     .replace(/매출[_\s]상세내역[\(（]?신용카드[\)）]?_*/gi,'')
     .replace(/\d{6}-\d{6}_/g,'')
     .replace(/_(시간대별_매출_현황|일별_매출_현황|매출_현황).*/gi,'')
-    .replace(/[_-]?(쿠팡이츠|쿠팡|배달의민족|배민|baemin|coupang|태블릿|tablet).*/gi,'')
+    .replace(/[_-]?(쿠팡이츠|쿠팡|배달의민족|배민|baemin|coupang|태블릿|tablet|주문내역|order.items|orders).*/gi,'')
     .replace(/_?\d{8}$/g,'').replace(/^_+|_+$/g,'').trim()||fname;
 }
 function detectType(H,raw){
@@ -601,6 +601,8 @@ function onFiles(flist){
       const isCoupang = flat3.includes('주문정보') && flat3.includes('매출액');
       const isTablet = flat3.includes('Store Name') && flat3.includes('Total Sales (Local)') && !flat3.includes('Product');
       const isOrderItems = flat3.includes('Store Name') && flat3.includes('Product') && flat3.includes('Dining Option');
+      console.log('[DEBUG] flat3 샘플:', flat3.slice(0,20));
+      console.log('[DEBUG] isOrderItems:', isOrderItems, 'isTablet:', isTablet, 'isCoupang:', isCoupang);
       
       if(isOrderItems){
         const rows=parseOrderItems(raw, sn);
