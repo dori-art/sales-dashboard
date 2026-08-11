@@ -744,7 +744,7 @@ function onDayClick(ds){
   if(!rangeStart||(!pickingEnd&&rangeEnd)){rangeStart=ds;rangeEnd=null;pickingEnd=true;}
   else if(pickingEnd){if(ds<rangeStart){rangeEnd=rangeStart;rangeStart=ds;}else rangeEnd=ds;pickingEnd=false;}
   document.querySelectorAll('.pb').forEach(b=>b.classList.remove('on'));
-  syncDateSelects();renderCal();renderKpis();renderHourly();
+  syncDateSelects();renderCal();renderKpis();renderHourly();renderIfStaffingActive();
 }
 function syncDateSelects(){
   const ss=document.getElementById('startSel'),es=document.getElementById('endSel');
@@ -760,7 +760,7 @@ function setPreset(days,btn){
   if(days===0){rangeStart=allDates[0];rangeEnd=last;}
   else{const from=new Date(last);from.setDate(from.getDate()-(days-1));rangeStart=from.toISOString().slice(0,10);rangeEnd=last;}
   calYear=parseInt(rangeEnd.slice(0,4));calMonth=parseInt(rangeEnd.slice(5,7))-1;
-  syncDateSelects();renderCal();renderKpis();renderHourly();
+  syncDateSelects();renderCal();renderKpis();renderHourly();renderIfStaffingActive();
 }
 function renderRangeHint(){
   const el=document.getElementById('rangeHint');
@@ -773,6 +773,11 @@ function renderRangeHint(){
 }
 
 // ── KPI ──────────────────────────────────────────────────
+function renderIfStaffingActive(){
+  const activeTab = document.querySelector('.tab-btn.on');
+  if(activeTab && activeTab.textContent.includes('인원')) renderStaffing();
+}
+
 function renderKpis(){
   const d=filtered();const sales=d.filter(r=>!r.isCancel);
   const total=d.reduce((s,r)=>s+r.amt,0);const cnt=sales.length;
@@ -917,50 +922,88 @@ async function renderStaffing() {
   });
   document.getElementById('menuSettings').innerHTML = html;
 
-  // 시간대별 작업량 계산
+  // 카테고리 매핑
+  const CAT_MAP = {
+    'Purist Drinks': '음료', 'Signature Beverages': '음료',
+    'Fresh Soda': '음료', 'Seasonal Drinks': '음료',
+    'Foods': '디저트', 'Shop': 'MD'
+  };
+
+  // 시간대별 + 카테고리별 작업량 계산
   const hourWork = {};
+  const catWork = { '음료': 0, '디저트': 0, 'MD': 0, '기타': 0 };
   items.forEach(r => {
     const s = menuSettingsCache[r.product] || {};
     const prepTime = s.prep_time_min || 1.0;
     const extra = (r.dining_option==='Eat Here') ? (s.extra_eat_here||0) : 0;
     const workMin = (prepTime + extra) * r.qty;
-    if(!hourWork[r.hour]) hourWork[r.hour] = 0;
-    hourWork[r.hour] += workMin;
+    if(!hourWork[r.hour]) hourWork[r.hour] = { total:0, bev:0, food:0, md:0 };
+    hourWork[r.hour].total += workMin;
+    const cat = CAT_MAP[r.master_category] || '기타';
+    if(cat==='음료') hourWork[r.hour].bev += workMin;
+    else if(cat==='디저트') hourWork[r.hour].food += workMin;
+    else if(cat==='MD') hourWork[r.hour].md += workMin;
+    catWork[cat] = (catWork[cat]||0) + workMin;
   });
 
   const hours = []; for(let i=7;i<=21;i++) hours.push(i);
-  const workMins = hours.map(h => hourWork[h]||0);
-  const totalWork = workMins.reduce((s,a)=>s+a,0);
+  const totalWork = Object.values(catWork).reduce((s,a)=>s+a,0);
   const totalDays = [...new Set(items.map(r=>r.date))].length || 1;
   const avgDailyWork = totalWork / totalDays;
+
+  const fmtTime = min => {
+    const h = Math.floor(min/60), m = Math.round(min%60);
+    return h>0 ? `${h}시간 ${m}분` : `${m}분`;
+  };
 
   if(scChart) scChart.destroy();
   scChart = new Chart(document.getElementById('sc'), {
     type: 'bar',
     data: {
       labels: hours.map(h=>h+':00'),
-      datasets: [{
-        data: workMins.map(w => parseFloat((w/totalDays).toFixed(1))),
-        backgroundColor: '#378ADD',
-        borderRadius: 4,
-        borderSkipped: false
-      }]
+      datasets: [
+        { label:'음료', data: hours.map(h=>(hourWork[h]?.bev||0)/totalDays), backgroundColor:'#2a78d6', stack:'a', borderRadius:0 },
+        { label:'디저트', data: hours.map(h=>(hourWork[h]?.food||0)/totalDays), backgroundColor:'#eb6834', stack:'a', borderRadius:0 },
+        { label:'MD', data: hours.map(h=>(hourWork[h]?.md||0)/totalDays), backgroundColor:'#1baf7a', stack:'a', borderRadius:{topLeft:4,topRight:4} }
+      ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(1)+'분'}} },
+      plugins: {
+        legend:{display:false},
+        tooltip:{callbacks:{
+          label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)}분`,
+          footer:i=>`합계: ${i.reduce((s,x)=>s+x.parsed.y,0).toFixed(1)}분`
+        }}
+      },
       scales: {
-        x: { grid:{display:false}, ticks:{font:{size:11}} },
-        y: { grid:{color:'rgba(128,128,128,0.08)'}, ticks:{callback:v=>v+'분',font:{size:11}}, beginAtZero:true }
+        x: { grid:{display:false}, ticks:{font:{size:11}}, stacked:true },
+        y: { grid:{color:'rgba(128,128,128,0.08)'}, ticks:{callback:v=>v+'분',font:{size:11}}, stacked:true, beginAtZero:true }
       }
     }
   });
 
+  // 하루 총 노동량
   document.getElementById('staffingSummary').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
-      <div class="kpi"><div class="kpi-l">하루 평균 총 작업시간</div><div class="kpi-v">${(avgDailyWork/60).toFixed(1)}시간</div><div class="kpi-s">${avgDailyWork.toFixed(0)}분</div></div>
-      <div class="kpi"><div class="kpi-l">분석 기간</div><div class="kpi-v">${totalDays}일</div><div class="kpi-s">총 ${totalWork.toFixed(0)}분</div></div>
-      <div class="kpi"><div class="kpi-l">메뉴 종류</div><div class="kpi-v">${products.length}종</div><div class="kpi-s">판매 메뉴 기준</div></div>
+    <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:10px">하루 총 노동량 (평균)</div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:320px">
+      ${['음료','디저트','MD','기타'].filter(c=>catWork[c]>0).map(c=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg2);border-radius:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:2px;background:${{음료:'#2a78d6',디저트:'#eb6834',MD:'#1baf7a',기타:'#888'}[c]};flex-shrink:0"></span>
+            <span style="font-size:13px;color:var(--text)">${c}</span>
+          </div>
+          <span style="font-size:13px;font-weight:500;color:var(--text)">${fmtTime(catWork[c]/totalDays)}</span>
+        </div>`).join('')}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--blue-lt);border-radius:8px;margin-top:4px">
+        <span style="font-size:14px;font-weight:500;color:var(--blue)">합계</span>
+        <span style="font-size:14px;font-weight:500;color:var(--blue)">${fmtTime(avgDailyWork)}</span>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:16px;font-size:12px;color:var(--text2)">
+      <span><span style="width:10px;height:10px;border-radius:2px;background:#2a78d6;display:inline-block;margin-right:4px"></span>음료</span>
+      <span><span style="width:10px;height:10px;border-radius:2px;background:#eb6834;display:inline-block;margin-right:4px"></span>디저트</span>
+      <span><span style="width:10px;height:10px;border-radius:2px;background:#1baf7a;display:inline-block;margin-right:4px"></span>MD</span>
     </div>
   `;
 }
