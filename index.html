@@ -775,7 +775,7 @@ function renderRangeHint(){
 // ── KPI ──────────────────────────────────────────────────
 function renderIfStaffingActive(){
   const activeTab = document.querySelector('.tab-btn.on');
-  if(activeTab && activeTab.textContent.includes('인원')) renderStaffing();
+  if(activeTab && activeTab.getAttribute('onclick') && activeTab.getAttribute('onclick').includes('staffing')) renderStaffing();
 }
 
 function renderKpis(){
