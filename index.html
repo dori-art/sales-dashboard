@@ -600,8 +600,9 @@ function onFiles(flist){
       const flat3=raw.slice(0,3).flat().map(x=>String(x||''));
       const isCoupang = flat3.includes('주문정보') && flat3.includes('매출액');
       const isTablet = flat3.includes('Store Name') && flat3.includes('Total Sales (Local)') && !flat3.includes('Product');
+      const isOrderItems = flat3.includes('Store Name') && flat3.includes('Product') && flat3.includes('Dining Option');
       
-      if(type==='order_items'){
+      if(isOrderItems){
         const rows=parseOrderItems(raw, sn);
         if(!rows.length){showToast('주문 데이터가 없어요');return;}
         showToast('DB에 저장 중...');
