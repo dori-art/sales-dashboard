@@ -1049,11 +1049,14 @@ async function saveMenuSettings() {
 
 // ── 품목 엑셀 내보내기 ───────────────────────────────────
 async function exportOrderItems(){
+  const qs = buildQueryParams('order_items');
+  const label = curStore==='all' ? '전체' : curStore;
+  const dateLabel = rangeStart ? `_${rangeStart}~${rangeEnd||rangeStart}` : '';
   showToast('품목 데이터 준비 중...');
   try {
     let all=[], offset=0, limit=1000;
     while(true){
-      const r=await fetch(SUPABASE_URL+'/rest/v1/order_items?select=store,date,hour,product,qty,dining_option,master_category,price&order=store.asc,date.asc,hour.asc&limit='+limit+'&offset='+offset,{
+      const r=await fetch(SUPABASE_URL+'/rest/v1/order_items?select=store,date,hour,product,qty,dining_option,master_category,price&order=store.asc,date.asc,hour.asc&limit='+limit+'&offset='+offset+qs,{
         headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
       });
       const rows=await r.json();
@@ -1065,26 +1068,18 @@ async function exportOrderItems(){
 
     const headers = ['매장','날짜','시간대','품목','카테고리','수량','금액','Dining Option'];
     const rows = all.map(r => [
-      r.store,
-      r.date,
-      r.hour+':00',
-      r.product,
-      r.master_category||'',
-      r.qty,
-      r.price||0,
-      r.dining_option||''
+      r.store, r.date, r.hour+':00', r.product,
+      r.master_category||'', r.qty, r.price||0, r.dining_option||''
     ]);
 
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = '품목데이터_전체_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.csv';
+    a.download = `품목데이터_${label}${dateLabel}.csv`;
     a.click();
     showToast(`${all.length.toLocaleString()}건 내보내기 완료`);
-  } catch(e) {
-    showToast('내보내기 실패');
-  }
+  } catch(e) { showToast('내보내기 실패'); }
 }
 
 async function exportExcel(){
