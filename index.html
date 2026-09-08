@@ -345,6 +345,8 @@ function parseOrderItems(raw, sn) {
   const productIdx = H.indexOf('Product');
   const qtyIdx = H.indexOf('Itens');
   const diningIdx = H.indexOf('Dining Option');
+  const priceIdx = H.indexOf('Total Price (Local)');
+  const masterCatIdx = H.indexOf('Master Category');
   if(dateIdx<0||productIdx<0) return rows;
 
   for(let i=1;i<raw.length;i++){
@@ -377,7 +379,10 @@ function parseOrderItems(raw, sn) {
     const qty = typeof r[qtyIdx]==='number' ? r[qtyIdx] : parseInt(String(r[qtyIdx]||1))||1;
     const diningOption = String(r[diningIdx]||'').trim();
 
-    rows.push({ store:sn, date, hour, product, qty, dining_option:diningOption, source:'태블릿' });
+    const rawPrice = r[priceIdx];
+    const price = typeof rawPrice==='number' ? Math.round(rawPrice) : parseInt(String(rawPrice||0).replace(/,/g,''))||0;
+    const masterCat = String(r[masterCatIdx]||'').trim();
+    rows.push({ store:sn, date, hour, product, qty, dining_option:diningOption, source:'태블릿', price, master_category:masterCat });
   }
   return rows;
 }
@@ -1048,7 +1053,7 @@ async function exportOrderItems(){
   try {
     let all=[], offset=0, limit=1000;
     while(true){
-      const r=await fetch(SUPABASE_URL+'/rest/v1/order_items?select=store,date,hour,product,qty,dining_option,master_category&order=store.asc,date.asc,hour.asc&limit='+limit+'&offset='+offset,{
+      const r=await fetch(SUPABASE_URL+'/rest/v1/order_items?select=store,date,hour,product,qty,dining_option,master_category,price&order=store.asc,date.asc,hour.asc&limit='+limit+'&offset='+offset,{
         headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
       });
       const rows=await r.json();
@@ -1058,7 +1063,7 @@ async function exportOrderItems(){
       offset+=limit;
     }
 
-    const headers = ['매장','날짜','시간대','품목','카테고리','수량','Dining Option'];
+    const headers = ['매장','날짜','시간대','품목','카테고리','수량','금액','Dining Option'];
     const rows = all.map(r => [
       r.store,
       r.date,
@@ -1066,6 +1071,7 @@ async function exportOrderItems(){
       r.product,
       r.master_category||'',
       r.qty,
+      r.price||0,
       r.dining_option||''
     ]);
 
