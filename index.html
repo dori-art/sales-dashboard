@@ -137,7 +137,8 @@ select{font-size:13px;padding:5px 10px;height:34px;border-radius:var(--rs);borde
   <span class="db-status"><span class="dot" id="dbDot"></span><span id="dbStatus">연결 확인 중...</span></span>
   <input id="jsonIn" type="file" accept=".json" style="display:none" onchange="loadJSON(this)">
   <div class="btn" onclick="document.getElementById('jsonIn').click()">↓ JSON</div>
-  <div class="btn" onclick="exportExcel()">↓ 엑셀</div>
+  <div class="btn" onclick="exportExcel()">↓ 매출 엑셀</div>
+  <div class="btn" onclick="exportOrderItems()">↓ 품목 엑셀</div>
   <div class="btn blue" onclick="exportJSON()">↑ JSON</div>
 </header>
 
@@ -1040,6 +1041,46 @@ async function saveMenuSettings() {
 
 
 // ── 엑셀 내보내기 ────────────────────────────────────────
+
+// ── 품목 엑셀 내보내기 ───────────────────────────────────
+async function exportOrderItems(){
+  showToast('품목 데이터 준비 중...');
+  try {
+    let all=[], offset=0, limit=1000;
+    while(true){
+      const r=await fetch(SUPABASE_URL+'/rest/v1/order_items?select=store,date,hour,product,qty,dining_option,master_category&order=store.asc,date.asc,hour.asc&limit='+limit+'&offset='+offset,{
+        headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
+      });
+      const rows=await r.json();
+      if(!Array.isArray(rows)||rows.length===0) break;
+      all=all.concat(rows);
+      if(rows.length<limit) break;
+      offset+=limit;
+    }
+
+    const headers = ['매장','날짜','시간대','품목','카테고리','수량','Dining Option'];
+    const rows = all.map(r => [
+      r.store,
+      r.date,
+      r.hour+':00',
+      r.product,
+      r.master_category||'',
+      r.qty,
+      r.dining_option||''
+    ]);
+
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '품목데이터_전체_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.csv';
+    a.click();
+    showToast(`${all.length.toLocaleString()}건 내보내기 완료`);
+  } catch(e) {
+    showToast('내보내기 실패');
+  }
+}
+
 async function exportExcel(){
   showToast('엑셀 준비 중...');
   try {
